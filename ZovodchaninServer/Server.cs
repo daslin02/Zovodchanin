@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 using ZNetwork;
 using static System.Runtime.InteropServices.JavaScript.JSType;
+using static ZNetwork.ZJSON;
 
 namespace ZovodchaninServer
 {
@@ -19,24 +20,36 @@ namespace ZovodchaninServer
         {
             PostRegister += PostRegisterFunc;
         }
-        private void PostRegisterFunc(string SenderID) 
+        private void PostRegisterFunc(string SenderID)
         {
+            // Get account data from database
+            DBAccount acc = dataBase.GetAccountByID(SenderID);
+
+            // Create registration response message using new serialization system
+            var response = new MessageResponseRegister
+            {
+                iSSuccses = true,
+                ID = SenderID,
+                Name = acc.Name,
+                Roles = acc.Role,
+                Groups = acc.Group
+            };
+
+
+            // Serialize to JSON
             ZJSON js = new ZJSON();
-            DBAccount acc = dataBase.GetAccountByID(SenderID );
-            string msg = js.CreateDateForClients(SenderID, acc.Name, acc.Role, "Register--Success", acc.Group);
-            Console.WriteLine($"отправленно на ID {SenderID}");
+            string msg = js.CreateMessage(response);
+
+            Console.WriteLine($"Sent to ID {SenderID}");
             SendDate(msg);
         }
         public override bool Register(string senderID, string text, string group, string SenderIP)
         {
             DBAccount acc =  dataBase.Register(senderID, text);
-            Console.WriteLine("регистрация...");
             if (acc.IsValid()) 
             {
-                Console.WriteLine("Успешно");
                 return true;
             }
-            Console.WriteLine("Провал");
             return false;
         }
         public void SendAll(string jsondate) 
@@ -63,55 +76,124 @@ namespace ZovodchaninServer
                 }
             }
         }
-        public override void SendDate(string JsonData)
+        public override async void SendDate(string JsonData)
         {
             ZJSON js = new ZJSON();
             byte[] data = Encoding.UTF8.GetBytes(JsonData);
+
+            // Deserialize message to determine its type and properties
+            BaseMassage? message = js.DeserializeMessage(JsonData);
+
+            if (message == null)
+            {
+                Console.WriteLine("[SERVER] Failed to deserialize message for sending");
+                return;
+            }
+
+            var sendTasks = new List<Task>();
+
             foreach ((string ID, string IP, TcpClient Client) in ListConnection)
             {
                 try
                 {
                     if (Client.Client.Connected)
                     {
-                        var datejs = js.ReadResponseDate(JsonData);
-                        
-                        Console.WriteLine( $"Results: {dataBase.CheckGroupByID(ID, datejs.Group)}");
-                        if (dataBase.CheckGroupByID(ID , datejs.Group)) 
-                        {
-                            
-                            Console.WriteLine("Send date Succeseful");
-                            Console.WriteLine($"Отправленно на {IP} c {ID} в группе {datejs.Group}");
+                        bool shouldSend = false;
+                        string targetGroup = "";
+                        string logMessage = "";
 
-                            NetworkStream stream = Client.GetStream();
-                            stream.Write(data, 0, data.Length);
-                        }
-                        else if (datejs.Group == "register") 
+                        // Handle different message types
+                        switch (message)
                         {
-                            Console.WriteLine($"Регистрация {IP} c {ID} ");
-                            Console.WriteLine(datejs.SenderID, datejs.Group, datejs.Text);
+                            case MessageResponseRegister registerResponse:
+                                if (registerResponse.ID == ID)
+                                {
+                                    shouldSend = true;
+                                    logMessage = $"[REGISTRATION] To {IP} (ID: {ID}) - Success: {registerResponse.iSSuccses}";
+                                }
+                                break;
+
+                            case MessageSendData sendData:
+                                targetGroup = sendData.Channel;
+                                if (dataBase.CheckGroupByID(ID, targetGroup))
+                                {
+                                    shouldSend = true;
+                                    logMessage = $"[MESSAGE] To {IP} (ID: {ID}) in group: {targetGroup}";
+                                }
+                                break;
+
+                            case MessageReceivedData receivedData:
+                                targetGroup = receivedData.Channels;
+                                if (dataBase.CheckGroupByID(ID, targetGroup))
+                                {
+                                    shouldSend = true;
+                                    logMessage = $"[NOTIFICATION] To {IP} (ID: {ID}) in channel: {targetGroup}";
+                                }
+                                break;
+
+                            case MessageSystemInfo systemInfo:
+                                shouldSend = true;
+                                logMessage = $"[SYSTEM] To {IP} (ID: {ID}) - Code: {systemInfo.Code}";
+                                break;
+
+                            default:
+                                shouldSend = false;
+                                break;
+                        }
+
+                        if (shouldSend)
+                        {
                             NetworkStream stream = Client.GetStream();
-                            stream.Write(data, 0, data.Length);
+                            await stream.WriteAsync(data, 0, data.Length);
+                            Console.WriteLine($"[SENT] {logMessage}");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Ошибка отправки {ID}: {ex.Message}");
+                    Console.WriteLine($"[ERROR] Failed to send to {ID}: {ex.Message}");
                 }
             }
         }
-        protected override async void ReceivedClientMessage(string senderID, string text, string group, long timestap, NetworkStream stream , TcpClient client)
+        protected override async void ReceivedClientMessage(string senderID, string text, string group, long timestamp, NetworkStream stream, TcpClient client)
         {
             ZJSON js = new ZJSON();
             string IP = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
+
             if (isValidClient(IP, senderID))
             {
-                string msg = js.CreateDateForClients(senderID, "PIDOR", "HUESOS", "SUCSSES", group);
+                // Create proper response message using new serialization system
+                DBAccount acc =  dataBase.GetAccountByID(senderID);
+
+                var response = new MessageReceivedData
+                {
+                    NameSender = senderID,
+                    Channels = group,
+                    SendTime = DateTimeOffset.FromUnixTimeSeconds(timestamp).DateTime,
+                    RolesSender = acc.Role 
+                };
+
+                // Serialize and send
+                string msg = js.CreateMessage(response);
                 SendDate(msg);
+
+                // Log the action
+                Console.WriteLine($"[MESSAGE] Processed message from {senderID} in group {group}");
                 return;
             }
-            else 
+            else
             {
+                // Send error message for invalid client
+                var errorMsg = new MessageSystemInfo
+                {
+                    Code = "INVALID_CLIENT",
+                    info = $"Client {senderID} is not valid or IP mismatch"
+                };
+
+                string msg = js.CreateMessage(errorMsg);
+                SendDate(msg);
+
+                Console.WriteLine($"[WARNING] Invalid client attempt: {senderID} from IP {IP}");
                 return;
             }
         }
@@ -120,58 +202,163 @@ namespace ZovodchaninServer
 
     internal class Programm
     {
-        
-        private static void Main() 
+        private static async Task Main()
         {
             DBInspector.DB dataBase;
             dataBase = DB.Instance;
 
-            if (!DB.checkConnecttion()) 
+            if (!DB.checkConnecttion())
             {
-                Console.WriteLine("Don't open SQL-Server");
+                Console.WriteLine("Can't open SQL-Server connection");
                 return;
             }
             dataBase.Connect();
 
-
-            Server  MyServer = new Server();
+            Server MyServer = new Server();
             MyServer.CreateZNetDate("127.0.0.1", 6739);
             MyServer.StartListening();
+
             ZJSON js = new ZJSON();
 
-            while (true) 
+            Console.WriteLine("Server started. Type 'help' for commands.");
+
+            while (true)
             {
-                string Value = Console.ReadLine().ToLower();
-                if (Value == "exit")
-                {
-                    MyServer.Close();
-                    break;
-                }
-                else if (Value.Split(' ')[0] == "send")
-                {
-                    // update
-                    string msg = js.CreateDateForClients("01231", "Egor", "Admin", "Hello Clients", "general01");
-                    MyServer.SendDate(msg);
+                string? Value = await Task.Run(() => Console.ReadLine());
+                if (string.IsNullOrEmpty(Value)) continue;
 
-                }
-                else if (Value.Split(' ')[0] == "accid") 
-                {
-                    DBAccount acc;
-                    acc = dataBase.GetAccountByID(Value.Split(" ")[1]);
-                    if (acc.IsValid())
-                    {
-                        Console.WriteLine($"------ACCOUNT SUCCESS-------- \n ID: {acc.ID} \n Name: {acc.Name} \n Password: {acc.Password}");
-                    }
-                    else Console.WriteLine("NO FOUND ACCOUNT") ;
-                }
-                else if (Value == "testmsg") 
-                {
-                    string msg = js.CreateDateForClients("01231", "Egor", "Admin", "Hello Clients", "all");
-                    MyServer.SendAll(msg);
-                    Console.WriteLine("Send All Account");
-                }
+                string[] commandParts = Value.ToLower().Split(' ');
+                string command = commandParts[0];
 
-                
+                switch (command)
+                {
+                    case "exit":
+                        MyServer.Close();
+                        Console.WriteLine("Server stopped");
+                        return;
+
+                    case "send":
+                        var sendData = new MessageSendData
+                        {
+                            ID = "Server",
+                            Message = "Hello Clients",
+                            Channel = "general01"
+                        };
+                        string msg = js.CreateMessage(sendData);
+                        MyServer.SendDate(msg);
+                        Console.WriteLine("[SERVER] Message sent to general01 group");
+                        break;
+
+                    case "sendto":
+                        if (commandParts.Length >= 3)
+                        {
+                            string group = commandParts[1];
+                            string message = string.Join(" ", commandParts.Skip(2));
+
+                            var groupMsg = new MessageSendData
+                            {
+                                ID = "Server",
+                                Message = message,
+                                Channel = group
+                            };
+
+                            string jsonMsg = js.CreateMessage(groupMsg);
+                            MyServer.SendDate(jsonMsg);
+                            Console.WriteLine($"[SERVER] Message sent to group: {group}");
+                        }
+                        else
+                        {
+                            Console.WriteLine("[USAGE] sendto [group] [message]");
+                        }
+                        break;
+
+                    case "accid":
+                        if (commandParts.Length >= 2)
+                        {
+                            string accountId = commandParts[1];
+                            DBAccount acc = dataBase.GetAccountByID(accountId);
+
+                            if (acc.IsValid())
+                            {
+                                Console.WriteLine($"\n--- ACCOUNT FOUND ---");
+                                Console.WriteLine($"ID:       {acc.ID}");
+                                Console.WriteLine($"Name:     {acc.Name}");
+                                Console.WriteLine($"Password: {acc.Password}");
+                                Console.WriteLine($"Role:     {acc.Role}");
+                                Console.WriteLine($"Group:    {acc.Group}");
+                                Console.WriteLine($"----------------------\n");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Account with ID '{accountId}' not found");
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine("[USAGE] accid [account_id]");
+                        }
+                        break;
+
+                    case "testmsg":
+                        var broadcastMsg = new MessageSendData
+                        {
+                            ID = "System",
+                            Message = "Test broadcast message from server",
+                            Channel = "all"
+                        };
+                        string broadcastJson = js.CreateMessage(broadcastMsg);
+                        MyServer.SendAll(broadcastJson);
+                        Console.WriteLine("[SERVER] Test message broadcasted to all clients");
+                        break;
+
+                    case "system":
+                        if (commandParts.Length >= 2)
+                        {
+                            string systemMessage = string.Join(" ", commandParts.Skip(1));
+
+                            var sysMsg = new MessageSystemInfo
+                            {
+                                Code = "SERVER_NOTIFICATION",
+                                info = systemMessage
+                            };
+
+                            string sysJson = js.CreateMessage(sysMsg);
+                            MyServer.SendAll(sysJson);
+                            Console.WriteLine($"[SYSTEM] Notification sent: {systemMessage}");
+                        }
+                        else
+                        {
+                            Console.WriteLine("[USAGE] system [message]");
+                        }
+                        break;
+
+                    case "list":
+                        // Show connected clients
+                        Console.WriteLine($"\n--- Connected Clients: {MyServer.ListConnection.Count} ---");
+                        foreach (var client in MyServer.ListConnection)
+                        {
+                            Console.WriteLine($"ID: {client.ID}, IP: {client.IP}");
+                        }
+                        Console.WriteLine("----------------------------------------\n");
+                        break;
+
+                    case "help":
+                        Console.WriteLine("\n=== SERVER COMMANDS ===");
+                        Console.WriteLine("exit                    - Stop the server");
+                        Console.WriteLine("send                    - Send test message to general01 group");
+                        Console.WriteLine("sendto [group] [msg]    - Send message to specific group");
+                        Console.WriteLine("accid [id]              - Get account info by ID");
+                        Console.WriteLine("testmsg                 - Broadcast test message to all clients");
+                        Console.WriteLine("system [message]        - Send system message to all clients");
+                        Console.WriteLine("list                    - Show connected clients");
+                        Console.WriteLine("help                    - Show this help");
+                        Console.WriteLine("=======================\n");
+                        break;
+
+                    default:
+                        Console.WriteLine($"Unknown command: '{command}'. Type 'help' for available commands.");
+                        break;
+                }
             }
         }
     }

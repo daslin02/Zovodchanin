@@ -4,10 +4,12 @@ using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Text;
 using ZNetwork;
+using static ZNetwork.ZJSON;
 namespace ZovodchaninClient
 {
     public class Client : ZNetClient 
     {
+        ZJSON js = new ZJSON();
         private CancellationTokenSource _cts;
         private Task _readTask;
 
@@ -48,7 +50,7 @@ namespace ZovodchaninClient
                 catch (OperationCanceledException)
                 {
 
-                    break; // Нормальная отмена
+                    break; 
                 }
                 catch (Exception ex)
                 {
@@ -116,8 +118,34 @@ namespace ZovodchaninClient
         protected override void OnDateReceived(string data) 
         {
             ZJSON js = new ZJSON();
-            var msg = js.ReadResponseDate(data);
-            Console.WriteLine($"{msg.Name} {msg.Text} {msg.SenderID}");
+            BaseMassage? message = js.DeserializeMessage(data);
+
+            switch (message)
+            {
+                case MessageResponseRegister registerResponse:
+                    Console.WriteLine($"[REGISTRATION RESPONSE] Success: {registerResponse.iSSuccses}, ID: {registerResponse.ID}, Name: {registerResponse.Name}");
+                    break;
+
+                case MessageSystemInfo systemInfo:
+                    Console.WriteLine($"[SYSTEM] Code: {systemInfo.Code}, Info: {systemInfo.info}");
+                    break;
+
+                case MessageReceivedData receivedData:
+                    Console.WriteLine($"[MESSAGE RECEIVED] From: {receivedData.NameSender}, Channel: {receivedData.Channels}, Text: {receivedData.Channels}, Time: {receivedData.SendTime}");
+                    break;
+
+                case MessageSendData sendData:
+                    Console.WriteLine($"[MESSAGE SEND] ID: {sendData.ID}, Channel: {sendData.Channel}, Message: {sendData.Message}");
+                    break;
+
+                case MessageRequestRegister requestRegister:
+                    Console.WriteLine($"[REGISTRATION REQUEST] Login: {requestRegister.login}");
+                    break;
+
+                default:
+                    Console.WriteLine($"[UNKNOWN] Type: {message.TypeMessage}");
+                    break;
+            }
         }
         /// <summary>
         /// функция  отвечает за регистрацию пользователя на сервере
@@ -126,9 +154,19 @@ namespace ZovodchaninClient
         /// <param name="Password"></param>
         public virtual void Register(string ID , string Password) 
         {
-            ZJSON js = new ZJSON();
-            string msg = js.CreateDateForServer(ID, Password, "Register");
-            Console.WriteLine (msg);
+            // Create registration request message
+            var registerRequest = new MessageRequestRegister
+            {
+                login = ID,
+                Password = Password
+                // TypeMessage will be set automatically in constructor
+            };
+
+            // Serialize to JSON
+            string msg = js.CreateMessage(registerRequest);
+            Console.WriteLine($"[REGISTRATION REQUEST] Sending: {msg}");
+
+            // Send to server
             SendCustomData(msg);
         }
 
