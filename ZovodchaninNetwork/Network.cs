@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using Microsoft.VisualBasic;
+using System.Data;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices.Marshalling;
@@ -15,6 +16,8 @@ namespace ZNetwork
 {
     public class ZJSON
     {
+       public MessageSerializer serializer = new MessageSerializer();
+
         private static JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
         {
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -165,6 +168,25 @@ namespace ZNetwork
                     throw new JsonException($"Failed to deserialize message: {ex.Message}", ex);
                 }
             }
+        }
+        /// <summary>
+        /// this create message for send
+        /// </summary>
+        /// <param name="msg">class message inherited from  BaseMessage</param>
+        /// <returns>data format json on string</returns>
+        public string CreateMessage(BaseMassage msg) 
+        {
+            string json = serializer.Serialize(msg);
+            return json;
+        }
+        /// <summary>
+        /// convert json string into class
+        /// </summary>
+        /// <param name="msg">json on string</param>
+        /// <returns>return class inherited from BaseMessage </returns>
+        public BaseMassage? DeserializeMessage(string msg)
+        {
+           return serializer.Deserialize(msg);
         }
             public class RequestsDate
             {
