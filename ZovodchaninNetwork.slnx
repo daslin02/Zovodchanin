@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="TempGUI/TempGUI.csproj" Id="6b73e889-b78a-449b-9fbc-b3ee2a608ee1" />
+  <Project Path="ZovodchaninClient/ZovodchaninClient.csproj" />
+  <Project Path="ZovodChaninDB/ZovodChaninDB.csproj" Id="4b3a3b90-b3cd-49a0-9834-250d1ec7123d" />
+  <Project Path="ZovodchaninNetwork/ZovodchaninNetwork.csproj" />
+  <Project Path="ZovodchaninServer/ZovodchaninServer.csproj" />
+</Solution>
