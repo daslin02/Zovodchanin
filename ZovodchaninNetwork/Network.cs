@@ -35,7 +35,7 @@ namespace ZNetwork
         /// </summary>
         public class MessageRequestRegister : BaseMassage
         {
-            MessageRequestRegister() => TypeMessage = nameof(MessageRequestRegister);
+            public MessageRequestRegister() => TypeMessage = nameof(MessageRequestRegister);
             public string login { get; set; }
             public string Password { get; set; }
         }
@@ -44,7 +44,7 @@ namespace ZNetwork
         /// </summary>
         public class MessageResponseRegister : BaseMassage
         {
-            MessageResponseRegister() => TypeMessage = nameof(MessageResponseRegister);
+            public MessageResponseRegister() => TypeMessage = nameof(MessageResponseRegister);
             public bool iSSuccses { get; set; }
             public string ID { get; set; } = "";
             public string Name { get; set; }
@@ -57,7 +57,7 @@ namespace ZNetwork
         /// </summary>
         public class MessageSystemInfo : BaseMassage
         {
-            MessageSystemInfo() => TypeMessage = nameof(MessageSystemInfo);
+            public MessageSystemInfo() => TypeMessage = nameof(MessageSystemInfo);
 
             public string Code { get; set; } // code error
             public string info { get; set; } // description info of error
@@ -68,8 +68,9 @@ namespace ZNetwork
         /// </summary>
         public class MessageSendData : BaseMassage
         {
-            MessageSendData() => TypeMessage = nameof(MessageSendData);
+            public MessageSendData() => TypeMessage = nameof(MessageSendData);
             public string Message { get; set; }
+
             public string ID { get; set; }
             /// <summary>
             /// this is Group Replicated Message
@@ -81,7 +82,7 @@ namespace ZNetwork
         /// </summary>
         public class MessageReceivedData : BaseMassage
         {
-            MessageReceivedData() => TypeMessage = nameof(MessageReceivedData);
+            public MessageReceivedData() => TypeMessage = nameof(MessageReceivedData);
             public string NameSender { get; set; }
             /// <summary>
             /// this is Group Replicated Message
@@ -105,7 +106,8 @@ namespace ZNetwork
             {
                 _options = new JsonSerializerOptions
                 {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase, // name property camelCase
+                    //PropertyNamingPolicy = JsonNamingPolicy.CamelCase, // name property camelCase
+                    PropertyNamingPolicy = null,
                     WriteIndented = false, // compact json for network
                     IncludeFields = false,
                     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull // don't send null property
@@ -569,52 +571,109 @@ public class ZNet
             using (NetworkStream stream = client.GetStream())
             {
                 byte[] buffer = new byte[4096];
-                ZJSON JsDate= new ZJSON();
+                ZJSON jsonHelper = new ZJSON();
+
+                
                 while (client.Connected)
                 {
                     try
                     {
                         int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
                         if (bytesRead == 0) break;
+
                         string receivedData = Encoding.UTF8.GetString(buffer, 0, bytesRead);
 
+                        BaseMassage? message = jsonHelper.DeserializeMessage(receivedData);
 
-                        var requestData = JsDate.ReadRequestDate(receivedData);
-
-                        string senderID = requestData.SenderID;
-                        string text = requestData.Text;
-                        string group = requestData.Group;
-                        
-                        string SenderIP = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
-                        string ID  = FindIDByIP(SenderIP);
-                        if (ID == "null") 
+                        if (message == null)
                         {
-                            if (Register(senderID , text , group , SenderIP)) 
-                            {
-                                UpdateIDByIP(SenderIP, senderID , client);
-                                PostRegister?.Invoke(senderID);
-                            }
-                            else 
-                            {
-                                string msg = JsDate.CreateDateForClients("null", "null", "null", "no-corect", "null");
-                                SendDateByIp(SenderIP, msg);
-                            }
-                        }
-                        else 
-                        {
-                            ReceivedClientMessage(senderID, text, group, requestData.Timestamp, stream , client);
+                            Console.WriteLine("[SERVER] Failed to deserialize message");
+                            continue;
                         }
 
+                        string clientIP = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
+                        string clientID = FindIDByIP(clientIP);
+
+                        switch (message)
+                        {
+                            case MessageRequestRegister registerRequest:
+                                string login = registerRequest.login;
+                                string password = registerRequest.Password;
+                                string group = "Register";
+
+                                if (clientID == "null")
+                                {
+                                    if (Register(login, password, group, clientIP))
+                                    {
+                                        UpdateIDByIP(clientIP, login, client);
+
+                                        PostRegister?.Invoke(login);
+
+                                        var successResponse = new MessageResponseRegister
+                                        {
+                                            iSSuccses = true,
+                                            ID = login, 
+                                            Name = login,
+                                            Roles = "User",
+                                            Groups = "General"
+                                        };
+                                        string responseJson = jsonHelper.CreateMessage(successResponse);
+                                        SendDateByIp(clientIP, responseJson);
+                                    }
+                                    else
+                                    {
+                                        var errorResponse = new MessageResponseRegister
+                                        {
+                                            iSSuccses = false,
+                                            ID = "",
+                                            Name = "",
+                                            Roles = "",
+                                            Groups = ""
+                                        };
+                                        string responseJson = jsonHelper.CreateMessage(errorResponse);
+                                        SendDateByIp(clientIP, responseJson);
+                                    }
+                                }
+                                else
+                                {
+                                    var systemMessage = new MessageSystemInfo
+                                    {
+                                        Code = "ALREADY_REGISTERED",
+                                        info = "Client already registered"
+                                    };
+                                    string responseJson = jsonHelper.CreateMessage(systemMessage);
+                                    SendDateByIp(clientIP, responseJson);
+                                }
+                                break;
+
+                            case MessageSendData sendData:
+                                string senderID = sendData.ID;
+                                string messageText = sendData.Message;
+                                string channel = sendData.Channel;
+
+                                ReceivedClientMessage(senderID, messageText, channel, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), stream, client);
+                                break;
+
+                            case MessageSystemInfo systemInfo:
+                                Console.WriteLine($"[SERVER] System message from {clientID}: {systemInfo.Code} - {systemInfo.info}");
+                                break;
+
+                            default:
+                                Console.WriteLine($"[SERVER] Unknown message type: {message.TypeMessage}");
+                                break;
+                        }
                     }
-                    catch
+                    catch (Exception ex)
                     {
+                        Console.WriteLine($"[SERVER] Error handling client: {ex.Message}");
                         break;
                     }
                 }
             }
 
-            Console.WriteLine("[СЕРВЕР] Клиент отключен");
+            Console.WriteLine("[SERVER] Client disconnected");
         }
+
         public void SendDateByIp(string IP , string date) 
         {
             ZJSON js = new ZJSON();
@@ -675,7 +734,10 @@ public class ZNet
             }
         }
 
-        // Удаление объекта по ID
+        /// <summary>
+        /// delete object by id 
+        /// </summary>
+        /// <param name="id"></param>
         public void RemoveByID(string id)
         {
             int removed = ListConnection.RemoveAll(x => x.ID == id);
@@ -685,7 +747,12 @@ public class ZNet
                 Console.WriteLine($"[СЕРВЕР] Клиент с ID {id} не найден");
         }
 
-        // Изменение IP по ID
+        /// <summary>
+        /// Edit IP by id
+        /// </summary>
+        /// <param name="id"></param>
+        /// <param name="newIP"></param>
+        /// <param name="Client"></param>
         public void UpdateIPByID(string id, string newIP , TcpClient Client)
         {
             var index = ListConnection.FindIndex(x => x.ID == id);
