@@ -205,6 +205,7 @@ namespace ZovodchaninServer
         private static async Task Main()
         {
             DBInspector.DB dataBase;
+            DB.iSLocalDataBase = true;
             dataBase = DB.Instance;
 
             if (!DB.checkConnecttion())

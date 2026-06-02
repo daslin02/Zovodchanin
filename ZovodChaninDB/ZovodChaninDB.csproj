@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
+    <PackageReference Include="SourceGear.sqlite3" Version="3.50.3" />
+    <PackageReference Include="System.Data.SQLite" Version="2.0.1" />
   </ItemGroup>
 
 </Project>
