@@ -1,0 +1,38 @@
+﻿<Window x:Class="Zovodchanin.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Zovodchanin"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid>
+        <Frame x:Name="MainFrame" NavigationUIVisibility="Hidden"/>
+        <Border x:Name="ToastNotification"
+                Background="#FF5252" 
+                CornerRadius="8"
+                Padding="15,10"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Margin="0,20,0,0"
+                Visibility="Collapsed"
+                Panel.ZIndex="100">
+
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.3"/>
+            </Border.Effect>
+
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="ToastIcon" Text="⚠️" FontSize="20" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                <TextBlock x:Name="ToastMessage" Text="Сообщение об ошибке" Foreground="White" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" MaxWidth="400" TextWrapping="Wrap"/>
+                <Button Content="✕" Background="Transparent" BorderThickness="0" Foreground="White"
+                        FontWeight="Bold" Margin="15,0,0,0" Cursor="Hand" Click="CloseToast_Click"
+                        ToolTip="Закрыть"/>
+            </StackPanel>
+
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="ToastTransform" Y="-100"/>
+            </Border.RenderTransform>
+        </Border>
+    </Grid>
+</Window>

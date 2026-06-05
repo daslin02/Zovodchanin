@@ -1,0 +1,152 @@
+﻿using System;
+using System.Collections.ObjectModel;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+
+namespace Zovodchanin
+{
+    public partial class MainPage : Page
+    {
+        private bool isDarkTheme = false;
+
+        // Collection to hold chat messages for data binding
+        public ObservableCollection<ChatMessage> Messages { get; set; }
+
+        public MainPage()
+        {
+            InitializeComponent();
+
+            // Initialize empty collections
+            Messages = new ObservableCollection<ChatMessage>();
+            MessagesItemsControl.ItemsSource = Messages;
+        }
+
+        /// <summary>
+        /// Adds a new message to the central chat area.
+        /// </summary>
+        public void ChatAddMessage(string userName, string text)
+        {
+            Messages.Add(new ChatMessage { UserName = userName, Text = text });
+
+            // Scroll to the bottom after adding a message
+            Dispatcher.InvokeAsync(() =>
+            {
+                ChatScrollViewer.ScrollToEnd();
+            }, System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+
+        /// <summary>
+        /// Adds a new chat button to the left list.
+        /// </summary>
+        public void ChatListAddChat(string chatName)
+        {
+            ChatListBox.Items.Add(chatName);
+        }
+
+        /// <summary>
+        /// Clears all chats from the left list.
+        /// </summary>
+        public void ChatListClear()
+        {
+            ChatListBox.Items.Clear();
+        }
+
+        /// <summary>
+        /// Clears all messages from the central chat area.
+        /// </summary>
+        public void ChatClear()
+        {
+            Messages.Clear();
+        }
+
+        // ---------------------------------------------------------------------
+        // UI EVENT HANDLERS
+        // ---------------------------------------------------------------------
+
+        public void SetTheme(bool isDark)
+        {
+            
+            isDarkTheme = isDark;
+            if (isDarkTheme)
+            {
+                // Apply Dark Theme resources
+                Resources["BackgroundBrush"] = new SolidColorBrush(Color.FromRgb(24, 26, 27));
+                Resources["SidebarBrush"] = new SolidColorBrush(Color.FromRgb(36, 37, 38));
+                Resources["TextBrush"] = new SolidColorBrush(Color.FromRgb(227, 227, 227));
+                Resources["SecondaryTextBrush"] = new SolidColorBrush(Color.FromRgb(179, 179, 179));
+                Resources["BorderBrush"] = new SolidColorBrush(Color.FromRgb(55, 57, 58));
+                Resources["AccentBrush"] = new SolidColorBrush(Color.FromRgb(0, 132, 255));
+                Resources["MessageBubbleBrush"] = new SolidColorBrush(Color.FromRgb(55, 57, 58));
+                Resources["HoverBrush"] = new SolidColorBrush(Color.FromRgb(45, 47, 48));
+                Resources["InputBrush"] = new SolidColorBrush(Color.FromRgb(55, 57, 58));
+                ThemeIcon.Text = "☀️";
+            }
+            else
+            {
+                // Apply Light Theme resources
+                Resources["BackgroundBrush"] = new SolidColorBrush(Colors.White);
+                Resources["SidebarBrush"] = new SolidColorBrush(Color.FromRgb(240, 242, 245));
+                Resources["TextBrush"] = new SolidColorBrush(Color.FromRgb(17, 17, 17));
+                Resources["SecondaryTextBrush"] = new SolidColorBrush(Color.FromRgb(101, 103, 107));
+                Resources["BorderBrush"] = new SolidColorBrush(Color.FromRgb(228, 230, 235));
+                Resources["AccentBrush"] = new SolidColorBrush(Color.FromRgb(0, 132, 255));
+                Resources["MessageBubbleBrush"] = new SolidColorBrush(Color.FromRgb(228, 230, 235));
+                Resources["HoverBrush"] = new SolidColorBrush(Color.FromRgb(228, 230, 235));
+                Resources["InputBrush"] = new SolidColorBrush(Color.FromRgb(240, 242, 245));
+                ThemeIcon.Text = "🌙";
+            }
+        }
+        public bool GetTheme() { return isDarkTheme; }
+        private void ThemeButton_Click(object sender, RoutedEventArgs e)
+        {
+            isDarkTheme = !isDarkTheme;
+            SetTheme(isDarkTheme);
+        }
+
+        private void ChatButton_Click(object sender, RoutedEventArgs e)
+        {
+            // Visual feedback: select the clicked item in the ListBox
+            if (sender is Button button && button.DataContext is string chatName)
+            {
+                ChatListBox.SelectedItem = chatName;
+
+                // Optional: Clear chat when switching, depending on your logic
+                // ChatClear(); 
+            }
+        }
+
+        private void MessageInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key == System.Windows.Input.Key.Enter)
+            {
+                SendMessage();
+            }
+        }
+
+        private void SendButton_Click(object sender, RoutedEventArgs e)
+        {
+            SendMessage();
+        }
+
+        private void SendMessage()
+        {
+            string text = MessageInput.Text.Trim();
+            if (string.IsNullOrEmpty(text)) return;
+
+            // Add message using the requested method structure
+            ChatAddMessage("You", text);
+
+            MessageInput.Clear();
+            MessageInput.Focus();
+        }
+    }
+
+    // Helper class for message data binding
+    public class ChatMessage
+    {
+        public string UserName { get; set; }
+        public string Text { get; set; }
+    }
+}
