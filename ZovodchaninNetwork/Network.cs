@@ -93,6 +93,7 @@ namespace ZNetwork
             /// </summary>
             public DateTime SendTime { get; set; } = DateTime.Now;
             public string RolesSender { get; set; }
+            public string Message { get; set; }
 
         }
         /// <summary>

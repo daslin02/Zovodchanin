@@ -170,7 +170,8 @@ namespace ZovodchaninServer
                     NameSender = senderID,
                     Channels = group,
                     SendTime = DateTimeOffset.FromUnixTimeSeconds(timestamp).DateTime,
-                    RolesSender = acc.Role 
+                    RolesSender = acc.Role ,
+                    Message = text
                 };
 
                 // Serialize and send
@@ -256,11 +257,13 @@ namespace ZovodchaninServer
                             string group = commandParts[1];
                             string message = string.Join(" ", commandParts.Skip(2));
 
-                            var groupMsg = new MessageSendData
+                            var groupMsg = new MessageReceivedData
                             {
-                                ID = "Server",
-                                Message = message,
-                                Channel = group
+                                Channels = group,
+                                NameSender = "Server",
+                                SendTime = DateTime.Now,
+                                RolesSender = "SERVER",
+                                Message = message
                             };
 
                             string jsonMsg = js.CreateMessage(groupMsg);

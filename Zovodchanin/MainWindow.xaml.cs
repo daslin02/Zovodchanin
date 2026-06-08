@@ -85,6 +85,10 @@ namespace Zovodchanin
                             ShowToast("не верный ID или пароль", true);
                         }
                         break;
+                    case ZJSON.MessageReceivedData data:
+                        if (userInfo == null) break;
+                        MP?.ChatAddMessage(data.NameSender, data.Message , data.SendTime);
+                        break;
                 }
                 
             }));
