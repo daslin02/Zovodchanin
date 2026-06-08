@@ -568,6 +568,9 @@ public class ZNet
         /// <returns></returns>
         private async Task HandleClient(TcpClient client)
         {
+            string clientIP = "";
+            string clientID = "null";
+
             using (client)
             using (NetworkStream stream = client.GetStream())
             {
@@ -579,6 +582,8 @@ public class ZNet
                 {
                     try
                     {
+                        clientIP = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
+                        clientID = FindIDByIP(clientIP);
                         int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
                         if (bytesRead == 0) break;
 
@@ -591,9 +596,6 @@ public class ZNet
                             Console.WriteLine("[SERVER] Failed to deserialize message");
                             continue;
                         }
-
-                        string clientIP = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
-                        string clientID = FindIDByIP(clientIP);
 
                         switch (message)
                         {
@@ -671,8 +673,50 @@ public class ZNet
                     }
                 }
             }
-
+            
+            RemoveClientConnection(clientIP, clientID);
             Console.WriteLine("[SERVER] Client disconnected");
+        }
+        /// <summary>
+        /// Remove user from List
+        /// </summary>
+        private void RemoveClientConnection(string clientIP, string clientID)
+        {
+            lock (ListConnection)
+            {
+                // find and Remove ID
+                var connectionToRemove = ListConnection.FirstOrDefault(c => c.IP == clientIP);
+                if (connectionToRemove != default)
+                {
+                    ListConnection.Remove(connectionToRemove);
+                    Console.WriteLine($"[SERVER] Removed client {connectionToRemove.ID} (IP: {connectionToRemove.IP}) from connection list");
+                }
+
+                if (clientID == "null")
+                { 
+                    for (int i = ListConnection.Count - 1; i >= 0; i--)
+                    {
+                        if (ListConnection[i].IP == clientIP && ListConnection[i].ID == "null")
+                        {
+                            Console.WriteLine($"[SERVER] Removing unauthorized client with IP: {ListConnection[i].IP}");
+                            ListConnection.RemoveAt(i);
+                        }
+                    }
+                }
+
+                if (clientID != "null")
+                {
+                    var connectionsWithSameID = ListConnection.Where(c => c.ID == clientID).ToList();
+                    foreach (var conn in connectionsWithSameID)
+                    {
+                        if (conn.IP != clientIP)
+                        {
+                            ListConnection.Remove(conn);
+                            Console.WriteLine($"[SERVER] Removed duplicate client {conn.ID} (IP: {conn.IP}) from connection list");
+                        }
+                    }
+                }
+            }
         }
 
         public void SendDateByIp(string IP , string date) 

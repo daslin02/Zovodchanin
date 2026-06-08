@@ -103,7 +103,7 @@ namespace DBInspector
             if (needCreateTables)
             {
                 Console.WriteLine($"[SQLite] Создаём таблицы...");
-                CreateLocalTables(LocalConnection); 
+                CreateLocalTables(LocalConnection);
             }
 
             Console.WriteLine($"[SQLite] Готово! Таблицы есть: {!needCreateTables}");
@@ -156,7 +156,6 @@ namespace DBInspector
                     Console.WriteLine($"[SQLite] Таблица UserAccount создана");
                 }
 
-                // Проверяем, что таблица действительно создалась
                 string checkQuery = "SELECT COUNT(*) FROM UserAccount";
                 using (var cmd = new SQLiteCommand(checkQuery, connection))
                 {
@@ -171,7 +170,6 @@ namespace DBInspector
             }
         }
 
-        // Локальная версия Register
         private DBAccount RegisterLocal(string ID, string Password)
         {
             try
@@ -248,7 +246,6 @@ namespace DBInspector
             return new DBAccount().SetZero();
         }
 
-        // Локальная версия GetAccountByID
         private DBAccount GetAccountByIDLocal(string ID)
         {
             try
@@ -315,7 +312,6 @@ namespace DBInspector
             return new DBAccount().SetZero();
         }
 
-        // Локальная версия CheckGroupByID
         private bool CheckGroupByIDLocal(string ID, string gr)
         {
             try
@@ -385,7 +381,6 @@ namespace DBInspector
             return false;
         }
 
-        // Локальная версия GetAllAccounts
         private DBAccount[] GetAllAccountsLocal()
         {
             List<DBAccount> accountsList = new List<DBAccount>();
@@ -445,7 +440,6 @@ namespace DBInspector
             return accountsList.ToArray();
         }
 
-        // Локальная версия checkConnecttion
         private static bool checkConnecttionLocal()
         {
             try
@@ -492,7 +486,7 @@ namespace DBInspector
             }
         }
 
-        // Дополнительный метод для добавления тестового пользователя в локальную БД
+
         public void AddTestUserLocal(string id, string name, string password, string role = "user", string groups = "")
         {
             if (!iSLocalDataBase) return;
@@ -516,5 +510,105 @@ namespace DBInspector
                 Console.WriteLine($"AddTestUser Error: {ex.Message}");
             }
         }
-    }
+    
+    private bool CanUserWriteToGroupLocal(string ID, string groupName)
+        {
+            try
+            {
+                string sql = $"SELECT Groups, Role FROM {AccountTable} WHERE ID = @id";
+                using (var cmd = new SQLiteCommand(sql, LocalConnection))
+                {
+                    cmd.Parameters.AddWithValue("@id", ID);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            string groups = reader["Groups"].ToString();
+                            string role = reader["Role"].ToString();
+
+                           
+                            if (role.Equals("admin", StringComparison.OrdinalIgnoreCase) ||
+                                role.Equals("moderator", StringComparison.OrdinalIgnoreCase))
+                            {
+                                return true;
+                            }
+
+                            foreach (string str in groups.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                if (groupName.Equals(str.Trim(), StringComparison.OrdinalIgnoreCase))
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Local CanUserWriteToGroup Error: {ex.Message}");
+            }
+            return false;
+        }
+
+        private bool CanUserWriteToGroupSSMS(string ID, string groupName)
+        {
+            try
+            {
+                string sql = $"SELECT Groups, Role FROM {AccountTable} WHERE ID = @id";
+                using (var cmd = new SqlCommand(sql, SQLConnection))
+                {
+                    cmd.Parameters.AddWithValue("@id", ID);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            string groups = reader["Groups"].ToString();
+                            string role = reader["Role"].ToString();
+
+                            // Администраторы и модераторы могут писать в любые группы
+                            if (role.Equals("admin", StringComparison.OrdinalIgnoreCase) ||
+                                role.Equals("moderator", StringComparison.OrdinalIgnoreCase))
+                            {
+                                return true;
+                            }
+
+                            // Проверяем, есть ли группа в списке доступа
+                            foreach (string str in groups.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                if (groupName.Equals(str.Trim(), StringComparison.OrdinalIgnoreCase))
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"CanUserWriteToGroup Error: {ex.Message}");
+            }
+            return false;
+        }
+
+
+        public bool CanUserWriteToGroup(string ID, string groupName)
+        {
+            if (iSLocalDataBase)
+            {
+                return CanUserWriteToGroupLocal(ID, groupName);
+            }
+            else
+            {
+                return CanUserWriteToGroupSSMS(ID, groupName);
+            }
+        }
+
+
+        public bool CanUserReadGroup(string ID, string groupName)
+        {
+            return CheckGroupByID(ID, groupName);
+        }
+    } 
 }

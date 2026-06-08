@@ -114,8 +114,8 @@ namespace ZovodchaninServer
                                 break;
 
                             case MessageSendData sendData:
-                                targetGroup = sendData.Channel;
-                                if (dataBase.CheckGroupByID(ID, targetGroup))
+                                bool canUserWrite = dataBase.CanUserWriteToGroup(ID, targetGroup);
+                                if (canUserWrite) 
                                 {
                                     shouldSend = true;
                                     logMessage = $"[MESSAGE] To {IP} (ID: {ID}) in group: {targetGroup}";
@@ -165,7 +165,7 @@ namespace ZovodchaninServer
                 // Create proper response message using new serialization system
                 DBAccount acc =  dataBase.GetAccountByID(senderID);
 
-                var response = new MessageReceivedData
+                MessageReceivedData response = new MessageReceivedData
                 {
                     NameSender = senderID,
                     Channels = group,
