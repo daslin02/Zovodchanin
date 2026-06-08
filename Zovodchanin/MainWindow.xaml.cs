@@ -29,7 +29,7 @@ namespace Zovodchanin
     /// </summary>
     public partial class MainWindow : Window
     {
-        Client client = new Client();
+        public Client client = new Client();
 
         RegistrationPage RegPage = new RegistrationPage();
         MainPage MP;
@@ -49,11 +49,16 @@ namespace Zovodchanin
             InitializeComponent();
             MainFrame.Navigate(RegPage);
 
+            
 
             _toastTimer = new System.Windows.Threading.DispatcherTimer();
             _toastTimer.Interval = TimeSpan.FromSeconds(3); 
             _toastTimer.Tick += ToastTimer_Tick;
 
+        }
+        public string GetUserID() 
+        {
+            return userInfo.ID;
         }
         private void ReadData(string data) 
         {
@@ -77,6 +82,11 @@ namespace Zovodchanin
                             MP = new MainPage();
                             MP.SetTheme(RegPage.GetTheme());
                             MainFrame.Navigate(MP);
+
+                            foreach(string chatName in userInfo.Groups.Split(';')) 
+                            {
+                                MP.ChatListAddChat(chatName);
+                            }
                             
                             break;
                         }

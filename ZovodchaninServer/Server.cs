@@ -13,6 +13,16 @@ using static ZNetwork.ZJSON;
 
 namespace ZovodchaninServer
 {
+    public class ChatHistoryMessage
+    {
+        public string id { get; set; }
+        public string userId { get; set; }
+        public string userName { get; set; }
+        public string role { get; set; }
+        public string text { get; set; }
+        public string timestamp { get; set; }
+        public long timestampUnix { get; set; }
+    }
     public class Server : ZnetServer
     {
         DB dataBase = DB.Instance;
@@ -160,23 +170,27 @@ namespace ZovodchaninServer
             ZJSON js = new ZJSON();
             string IP = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
 
+            if (senderID == FindIDByIP(IP)) return;
             if (isValidClient(IP, senderID))
             {
                 // Create proper response message using new serialization system
-                DBAccount acc =  dataBase.GetAccountByID(senderID);
+                DBAccount acc = dataBase.GetAccountByID(senderID);
 
                 MessageReceivedData response = new MessageReceivedData
                 {
                     NameSender = senderID,
                     Channels = group,
                     SendTime = DateTimeOffset.FromUnixTimeSeconds(timestamp).DateTime,
-                    RolesSender = acc.Role ,
+                    RolesSender = acc.Role,
                     Message = text
                 };
 
                 // Serialize and send
                 string msg = js.CreateMessage(response);
                 SendDate(msg);
+
+                //  Save message to chat history 
+                await SaveMessageToHistory(senderID, text, group, DateTimeOffset.FromUnixTimeSeconds(timestamp).DateTime, acc.Role);
 
                 // Log the action
                 Console.WriteLine($"[MESSAGE] Processed message from {senderID} in group {group}");
@@ -198,6 +212,144 @@ namespace ZovodchaninServer
                 return;
             }
         }
+        // ADDED METHOD: Save message to history 
+        /// <summary>
+        /// Saves message to daily JSON file for the channel
+        /// </summary>
+        private async Task SaveMessageToHistory(string senderID, string text, string channel, DateTime sendTime, string role)
+        {
+            try
+            {
+                // Create base directory for chat history
+                string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ChatHistory");
+                if (!Directory.Exists(basePath))
+                    Directory.CreateDirectory(basePath);
+
+                // Create channel directory
+                string channelPath = Path.Combine(basePath, SanitizeFileName(channel));
+                if (!Directory.Exists(channelPath))
+                    Directory.CreateDirectory(channelPath);
+
+                // Generate filename based on date
+                string dateStr = sendTime.ToString("yyyy-MM-dd");
+                string filePath = Path.Combine(channelPath, $"{dateStr}.json");
+
+                // Message object to save
+                var messageObject = new
+                {
+                    id = Guid.NewGuid().ToString(),
+                    userId = senderID,
+                    userName = senderID,
+                    role = role,
+                    text = text,
+                    timestamp = sendTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                    timestampUnix = new DateTimeOffset(sendTime).ToUnixTimeSeconds()
+                };
+
+                // Load existing messages or create new list
+                List<object> messages = new List<object>();
+                if (File.Exists(filePath))
+                {
+                    string existingJson = await File.ReadAllTextAsync(filePath);
+                    var existingData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(existingJson);
+                    if (existingData != null && existingData.ContainsKey("messages"))
+                    {
+                        // Extract existing messages
+                        var existingMessages = System.Text.Json.JsonSerializer.Deserialize<List<object>>(existingData["messages"].ToString());
+                        if (existingMessages != null)
+                            messages = existingMessages;
+                    }
+                }
+
+                // Add new message
+                messages.Add(messageObject);
+
+                // Prepare full history object
+                var historyData = new
+                {
+                    channel = channel,
+                    date = dateStr,
+                    lastUpdated = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                    totalMessages = messages.Count,
+                    messages = messages
+                };
+
+                // Save to file
+                string jsonContent = System.Text.Json.JsonSerializer.Serialize(historyData, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                await File.WriteAllTextAsync(filePath, jsonContent);
+
+                // Update database record
+                long fileSize = new FileInfo(filePath).Length;
+                dataBase.SaveChatHistoryRecord(channel, sendTime.Date, filePath, messages.Count, fileSize);
+
+                Console.WriteLine($"[HISTORY] Saved message from {senderID} to {channel} - Total messages today: {messages.Count}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HISTORY ERROR] Failed to save message: {ex.Message}");
+            }
+        }
+        /// <summary>
+        /// Removes invalid characters from filename
+        /// </summary>
+        private string SanitizeFileName(string name)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                name = name.Replace(c, '_');
+            }
+            return name;
+        }
+        public async Task<List<ChatHistoryMessage>> GetChatHistory(string channel, DateTime date)
+        {
+            var messages = new List<ChatHistoryMessage>();
+
+            try
+            {
+                string basePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ChatHistory");
+                string channelPath = Path.Combine(basePath, SanitizeFileName(channel));
+                string dateStr = date.ToString("yyyy-MM-dd");
+                string filePath = Path.Combine(channelPath, $"{dateStr}.json");
+
+                if (File.Exists(filePath))
+                {
+                    string jsonContent = await File.ReadAllTextAsync(filePath);
+                    var historyData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(jsonContent);
+
+                    if (historyData != null && historyData.ContainsKey("messages"))
+                    {
+                        var messagesList = System.Text.Json.JsonSerializer.Deserialize<List<ChatHistoryMessage>>(historyData["messages"].ToString());
+                        if (messagesList != null)
+                            messages = messagesList;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[HISTORY ERROR] Failed to get chat history: {ex.Message}");
+            }
+
+            return messages;
+        }
+        /// <summary>
+        /// Loads messages from last N days for a channel
+        /// </summary>
+        public async Task<List<ChatHistoryMessage>> GetRecentMessages(string channel, int days = 7)
+        {
+            var allMessages = new List<ChatHistoryMessage>();
+
+            for (int i = 0; i < days; i++)
+            {
+                DateTime date = DateTime.Now.Date.AddDays(-i);
+                var messages = await GetChatHistory(channel, date);
+                allMessages.AddRange(messages);
+            }
+
+            // Sort by timestamp
+            return allMessages.OrderBy(m => m.timestamp).ToList();
+        }
+
+
     }
 
 

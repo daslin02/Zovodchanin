@@ -74,10 +74,13 @@ namespace DBInspector
             }
             SQLConnection = new SqlConnection(Connection);
             SQLConnection.Open();
+
+            // ADDED: Initialize chat history table for SSMS
+            CreateChatHistoryTableSSMS();
         }
 
         /// <summary>
-        /// Create by needed  and connect Database ,table
+        /// Create by needed and connect Database, table
         /// </summary>
         private void ConnectLocal()
         {
@@ -105,6 +108,9 @@ namespace DBInspector
                 Console.WriteLine($"[SQLite] Создаём таблицы...");
                 CreateLocalTables(LocalConnection);
             }
+
+            // ADDED: Always ensure chat history table exists
+            CreateChatHistoryTableLocal();
 
             Console.WriteLine($"[SQLite] Готово! Таблицы есть: {!needCreateTables}");
         }
@@ -593,6 +599,283 @@ namespace DBInspector
         }
 
 
+        // Table name for chat history
+        public string ChatHistoryTable = "ChatHistory";
+
+        /// <summary>
+        /// Creates ChatHistory table if not exists (Local version)
+        /// </summary>
+        private void CreateChatHistoryTableLocal()
+        {
+            try
+            {
+                string createTableQuery = @"
+            CREATE TABLE IF NOT EXISTS ChatHistory (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ChannelName TEXT NOT NULL,
+                Date TEXT NOT NULL,
+                FilePath TEXT NOT NULL,
+                MessageCount INTEGER DEFAULT 0,
+                FileSize INTEGER DEFAULT 0,
+                CreatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(ChannelName, Date)
+            )";
+
+                using (var cmd = new SQLiteCommand(createTableQuery, LocalConnection))
+                {
+                    cmd.ExecuteNonQuery();
+                    Console.WriteLine($"[SQLite] Table ChatHistory created/verified");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SQLite] Error creating ChatHistory table: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Creates ChatHistory table if not exists (SSMS version)
+        /// </summary>
+        private void CreateChatHistoryTableSSMS()
+        {
+            try
+            {
+                string createTableQuery = @"
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ChatHistory' AND xtype='U')
+            CREATE TABLE ChatHistory (
+                Id INT PRIMARY KEY IDENTITY(1,1),
+                ChannelName NVARCHAR(100) NOT NULL,
+                Date NVARCHAR(20) NOT NULL,
+                FilePath NVARCHAR(500) NOT NULL,
+                MessageCount INT DEFAULT 0,
+                FileSize BIGINT DEFAULT 0,
+                CreatedAt DATETIME2 DEFAULT GETUTCDATE(),
+                CONSTRAINT UQ_ChatHistory_ChannelDate UNIQUE(ChannelName, Date)
+            )";
+
+                using (var cmd = new SqlCommand(createTableQuery, SQLConnection))
+                {
+                    cmd.ExecuteNonQuery();
+                    Console.WriteLine($"[SSMS] Table ChatHistory created/verified");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SSMS] Error creating ChatHistory table: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Public method to initialize chat history table
+        /// </summary>
+        public void InitChatHistoryTable()
+        {
+            if (iSLocalDataBase)
+            {
+                CreateChatHistoryTableLocal();
+            }
+            else
+            {
+                CreateChatHistoryTableSSMS();
+            }
+        }
+
+        /// <summary>
+        /// Saves chat history record to database (Local version)
+        /// </summary>
+        private void SaveChatHistoryRecordLocal(string channelName, DateTime date, string filePath, int messageCount, long fileSize)
+        {
+            try
+            {
+                string dateStr = date.ToString("yyyy-MM-dd");
+                string sql = @"INSERT OR REPLACE INTO ChatHistory (ChannelName, Date, FilePath, MessageCount, FileSize, CreatedAt) 
+                       VALUES (@channel, @date, @path, @count, @size, datetime('now'))";
+
+                using (var cmd = new SQLiteCommand(sql, LocalConnection))
+                {
+                    cmd.Parameters.AddWithValue("@channel", channelName);
+                    cmd.Parameters.AddWithValue("@date", dateStr);
+                    cmd.Parameters.AddWithValue("@path", filePath);
+                    cmd.Parameters.AddWithValue("@count", messageCount);
+                    cmd.Parameters.AddWithValue("@size", fileSize);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SQLite] Error saving chat history record: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Saves chat history record to database (SSMS version)
+        /// </summary>
+        private void SaveChatHistoryRecordSSMS(string channelName, DateTime date, string filePath, int messageCount, long fileSize)
+        {
+            try
+            {
+                string dateStr = date.ToString("yyyy-MM-dd");
+                string sql = @"MERGE INTO ChatHistory AS target
+                       USING (SELECT @channel AS ChannelName, @date AS Date) AS source
+                       ON target.ChannelName = source.ChannelName AND target.Date = source.Date
+                       WHEN MATCHED THEN
+                           UPDATE SET FilePath = @path, MessageCount = @count, FileSize = @size, CreatedAt = GETUTCDATE()
+                       WHEN NOT MATCHED THEN
+                           INSERT (ChannelName, Date, FilePath, MessageCount, FileSize, CreatedAt)
+                           VALUES (@channel, @date, @path, @count, @size, GETUTCDATE());";
+
+                using (var cmd = new SqlCommand(sql, SQLConnection))
+                {
+                    cmd.Parameters.AddWithValue("@channel", channelName);
+                    cmd.Parameters.AddWithValue("@date", dateStr);
+                    cmd.Parameters.AddWithValue("@path", filePath);
+                    cmd.Parameters.AddWithValue("@count", messageCount);
+                    cmd.Parameters.AddWithValue("@size", fileSize);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SSMS] Error saving chat history record: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Public method to save chat history record
+        /// </summary>
+        public void SaveChatHistoryRecord(string channelName, DateTime date, string filePath, int messageCount, long fileSize)
+        {
+            if (iSLocalDataBase)
+            {
+                SaveChatHistoryRecordLocal(channelName, date, filePath, messageCount, fileSize);
+            }
+            else
+            {
+                SaveChatHistoryRecordSSMS(channelName, date, filePath, messageCount, fileSize);
+            }
+        }
+
+        /// <summary>
+        /// Gets chat history record by channel and date (Local version)
+        /// </summary>
+        private (string FilePath, int MessageCount, long FileSize) GetChatHistoryRecordLocal(string channelName, DateTime date)
+        {
+            try
+            {
+                string dateStr = date.ToString("yyyy-MM-dd");
+                string sql = $"SELECT FilePath, MessageCount, FileSize FROM {ChatHistoryTable} WHERE ChannelName = @channel AND Date = @date";
+
+                using (var cmd = new SQLiteCommand(sql, LocalConnection))
+                {
+                    cmd.Parameters.AddWithValue("@channel", channelName);
+                    cmd.Parameters.AddWithValue("@date", dateStr);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            return (reader["FilePath"].ToString(),
+                                    Convert.ToInt32(reader["MessageCount"]),
+                                    Convert.ToInt64(reader["FileSize"]));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SQLite] Error getting chat history record: {ex.Message}");
+            }
+            return (null, 0, 0);
+        }
+
+        /// <summary>
+        /// Gets chat history record by channel and date (SSMS version)
+        /// </summary>
+        private (string FilePath, int MessageCount, long FileSize) GetChatHistoryRecordSSMS(string channelName, DateTime date)
+        {
+            try
+            {
+                string dateStr = date.ToString("yyyy-MM-dd");
+                string sql = $"SELECT FilePath, MessageCount, FileSize FROM {ChatHistoryTable} WHERE ChannelName = @channel AND Date = @date";
+
+                using (var cmd = new SqlCommand(sql, SQLConnection))
+                {
+                    cmd.Parameters.AddWithValue("@channel", channelName);
+                    cmd.Parameters.AddWithValue("@date", dateStr);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            return (reader["FilePath"].ToString(),
+                                    Convert.ToInt32(reader["MessageCount"]),
+                                    Convert.ToInt64(reader["FileSize"]));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SSMS] Error getting chat history record: {ex.Message}");
+            }
+            return (null, 0, 0);
+        }
+
+        /// <summary>
+        /// Public method to get chat history record
+        /// </summary>
+        public (string FilePath, int MessageCount, long FileSize) GetChatHistoryRecord(string channelName, DateTime date)
+        {
+            if (iSLocalDataBase)
+            {
+                return GetChatHistoryRecordLocal(channelName, date);
+            }
+            else
+            {
+                return GetChatHistoryRecordSSMS(channelName, date);
+            }
+        }
+
+        /// <summary>
+        /// Deletes old chat history records (older than daysToKeep)
+        /// </summary>
+        public void DeleteOldChatHistory(int daysToKeep = 30)
+        {
+            string cutoffDate = DateTime.UtcNow.AddDays(-daysToKeep).ToString("yyyy-MM-dd");
+
+            if (iSLocalDataBase)
+            {
+                try
+                {
+                    string sql = $"DELETE FROM {ChatHistoryTable} WHERE Date < @cutoffDate";
+                    using (var cmd = new SQLiteCommand(sql, LocalConnection))
+                    {
+                        cmd.Parameters.AddWithValue("@cutoffDate", cutoffDate);
+                        int deleted = cmd.ExecuteNonQuery();
+                        Console.WriteLine($"[SQLite] Deleted {deleted} old chat history records");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SQLite] Error deleting old chat history: {ex.Message}");
+                }
+            }
+            else
+            {
+                try
+                {
+                    string sql = $"DELETE FROM {ChatHistoryTable} WHERE Date < @cutoffDate";
+                    using (var cmd = new SqlCommand(sql, SQLConnection))
+                    {
+                        cmd.Parameters.AddWithValue("@cutoffDate", cutoffDate);
+                        int deleted = cmd.ExecuteNonQuery();
+                        Console.WriteLine($"[SSMS] Deleted {deleted} old chat history records");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SSMS] Error deleting old chat history: {ex.Message}");
+                }
+            }
+        }
         public bool CanUserWriteToGroup(string ID, string groupName)
         {
             if (iSLocalDataBase)

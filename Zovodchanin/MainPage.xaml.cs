@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using ZNetwork;
 
 namespace Zovodchanin
 {
@@ -13,6 +14,7 @@ namespace Zovodchanin
         // Collection to hold chat messages for data binding
         public ObservableCollection<ChatMessage> Messages { get; set; }
 
+        private string _currentSelectedChat = "Error";
         public MainPage()
         {
             InitializeComponent();
@@ -20,6 +22,28 @@ namespace Zovodchanin
             // Initialize empty collections
             Messages = new ObservableCollection<ChatMessage>();
             MessagesItemsControl.ItemsSource = Messages;
+            ChatListBox.SelectionChanged += ChatListBox_SelectionChanged;
+        }
+        /// <summary>
+        /// Gets the currently selected chat name
+        /// </summary>
+        public string GetCurrentSelectedChat()
+        {
+            return _currentSelectedChat;
+        }
+        private void ChatListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (ChatListBox.SelectedItem != null)
+            {
+                _currentSelectedChat = ChatListBox.SelectedItem.ToString();
+                Console.WriteLine($"[UI] Switched to chat: {_currentSelectedChat}");
+
+                // Optional: Clear messages when switching chats
+                // ChatClear();
+
+                // Optional: Load history for this chat
+                // LoadChatHistory(_currentSelectedChat);
+            }
         }
 
         /// <summary>
@@ -155,6 +179,7 @@ namespace Zovodchanin
 
         private void SendButton_Click(object sender, RoutedEventArgs e)
         {
+
             SendMessage();
         }
 
@@ -165,6 +190,16 @@ namespace Zovodchanin
 
             // Add message using the requested method structure
             ChatAddMessage("Вы", text , DateTime.Now);
+
+            var MW = Application.Current.MainWindow as MainWindow;
+            ZJSON.MessageSendData data = new ZJSON.MessageSendData
+            {
+                ID = MW.GetUserID(),
+                Message = text,
+                Channel = GetCurrentSelectedChat()
+            };
+            ZJSON.MessageSerializer ser = new ZJSON.MessageSerializer();
+            MW.client.SendCustomData(ser.Serialize(data));
 
             MessageInput.Clear();
             MessageInput.Focus();
