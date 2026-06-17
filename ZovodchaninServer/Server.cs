@@ -101,11 +101,22 @@ namespace ZovodchaninServer
             }
 
             var sendTasks = new List<Task>();
+            string senderId = null;
+            if (message is MessageReceivedData RCD)
+            {
+                senderId = RCD.NameSender;
+            }
+
 
             foreach ((string ID, string IP, TcpClient Client) in ListConnection)
             {
                 try
                 {
+                    if (senderId != null && ID == senderId)
+                    {
+                        continue;
+                    }
+
                     if (Client.Client.Connected)
                     {
                         bool shouldSend = false;
@@ -170,7 +181,7 @@ namespace ZovodchaninServer
             ZJSON js = new ZJSON();
             string IP = ((IPEndPoint)client.Client.RemoteEndPoint!).Address.ToString();
 
-            if (senderID == FindIDByIP(IP)) return;
+            //if (senderID == FindIDByIP(IP)) return;
             if (isValidClient(IP, senderID))
             {
                 // Create proper response message using new serialization system
