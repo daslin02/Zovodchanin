@@ -1,6 +1,7 @@
 ﻿using System.Reflection.Emit;
 using System.Text;
 using System.Windows;
+using System.IO;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
@@ -22,6 +23,7 @@ namespace Zovodchanin
         public string Name { get; set; }
         public string Roles { get; set; }
         public string Groups { get; set; }
+        public string Password { get; set; }
 
     }
     /// <summary>
@@ -36,6 +38,8 @@ namespace Zovodchanin
 
         private ZJSON.MessageSerializer _msgSer;
         private System.Windows.Threading.DispatcherTimer _toastTimer;
+        private FileManager FM = new FileManager();
+
 
         UserInfo userInfo; 
 
@@ -48,8 +52,14 @@ namespace Zovodchanin
 
             InitializeComponent();
             MainFrame.Navigate(RegPage);
+            if (FM.CacheExists())
+            {
+                CashFile data = FM.LoadData();
+                RegPage.SetTheme(data.DarkMode);
+                Register(data.ID, data.Password);
 
-            
+            }
+
 
             _toastTimer = new System.Windows.Threading.DispatcherTimer();
             _toastTimer.Interval = TimeSpan.FromSeconds(3); 
@@ -70,6 +80,7 @@ namespace Zovodchanin
             client.SendCustomData(ser);
             userInfo = null;
             RegPage = new RegistrationPage();
+            RegPage.SetTheme(MP.GetTheme());
             MP = null;
             MainFrame.Navigate(RegPage);
             
@@ -91,10 +102,16 @@ namespace Zovodchanin
                                 userInfo.Name = response.Name;
                                 userInfo.Roles = response.Roles;
                                 userInfo.Groups = response.Groups;
+                                userInfo.Password = RegPage.txtPassword.Password;
                             }   
                             ShowToast("Добро пожаловать", false);
                             MP = new MainPage();
                             MP.SetTheme(RegPage.GetTheme());
+                            if (RegPage.chkRememberMe.IsChecked.Value ) 
+                            {
+                                CashFile data = FM.LoadData();
+                                FM.UpdateData(userInfo.ID, userInfo.Password, RegPage.GetTheme());
+                            }
                             MainFrame.Navigate(MP);
 
                             foreach(string chatName in userInfo.Groups.Split(';')) 
