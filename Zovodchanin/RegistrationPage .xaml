@@ -12,6 +12,7 @@
         <SolidColorBrush x:Key="BorderBrush" Color="#CCCCCC"/>
         <SolidColorBrush x:Key="ButtonBrush" Color="#007ACC"/>
         <SolidColorBrush x:Key="ThemeButtonBrush" Color="#E0E0E0"/>
+        <SolidColorBrush x:Key="CheckBoxBrush" Color="#007ACC"/>
 
         <!-- style -->
         <Style TargetType="TextBox">
@@ -40,6 +41,59 @@
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        </Style>
+
+        <!-- Стиль для CheckBox -->
+        <Style TargetType="CheckBox">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            <Setter Property="Margin" Value="0,5,0,15"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border x:Name="CheckBoxBorder" 
+                                    Grid.Column="0"
+                                    Width="18" 
+                                    Height="18" 
+                                    Background="{DynamicResource InputBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="3"
+                                    Margin="0,0,10,0">
+                                <TextBlock x:Name="CheckMark" 
+                                           Text="✓" 
+                                           FontSize="12"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource CheckBoxBrush}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Visibility="Collapsed"/>
+                            </Border>
+
+                            <ContentPresenter Grid.Column="1" 
+                                              Content="{TemplateBinding Content}"
+                                              VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="CheckBoxBorder" Property="Background" Value="#E6F2FF"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CheckBoxBorder" Property="BorderBrush" Value="{DynamicResource CheckBoxBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <Style x:Key="RegisterButton" TargetType="Button">
@@ -96,7 +150,7 @@
         <Border Background="{DynamicResource CardBrush}" 
                 CornerRadius="10" 
                 Width="400"
-                Height="410"
+                Height="450"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 Padding="40">
@@ -115,14 +169,17 @@
                 <Label Content="ID:" Target="{Binding ElementName=txtUsername}"/>
                 <TextBox x:Name="txtUsername"/>
 
-
-                <Label Content="_Пароль:" Target="{Binding ElementName=txtPassword}"/>
+                <Label Content="Пароль:" Target="{Binding ElementName=txtPassword}"/>
                 <PasswordBox x:Name="txtPassword"/>
 
-   
+                <!-- Галочка "Оставаться в системе" -->
+                <CheckBox x:Name="chkRememberMe" 
+                          Content="Оставаться в системе"
+                          IsChecked="False"/>
+
                 <Button Content="Зарегистрироваться"
                         Style="{StaticResource RegisterButton}"
-                        Margin="0,20,0,0"
+                        Margin="0,10,0,0"
                         Click="RegisterButton_Click"/>
             </StackPanel>
         </Border>

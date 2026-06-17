@@ -1,47 +1,70 @@
-﻿using Microsoft.VisualBasic;
-using System.Data;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices.Marshalling;
-using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
-using System.Xml.Linq;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 using static ZNetwork.ZJSON;
 
 namespace ZNetwork
 {
+    // ==========================================
+    // 1. ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ ДЛЯ ДАТЫ
+    // (ДОЛЖНЫ БЫТЬ ВНЕ КЛАССА ZJSON)
+    // ==========================================
+    public class RequestsDate
+    {
+        public string SenderID { get; set; } = "";
+        public string Text { get; set; } = "";
+        public string Group { get; set; } = "";
+        public long Timestamp { get; set; }
+
+        public RequestsDate()
+        {
+            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        }
+    }
+
+    public class ResponseDate
+    {
+        public string SenderID { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Role { get; set; } = "";
+        public string Text { get; set; } = "";
+        public string Group { get; set; } = "";
+        public long Timestamp { get; set; }
+        public string Type { get; set; } = "message";
+
+        public ResponseDate()
+        {
+            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        }
+    }
+
     public class ZJSON
     {
-       public MessageSerializer serializer = new MessageSerializer();
+        public MessageSerializer serializer = new MessageSerializer();
 
         private static JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
         {
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
             WriteIndented = true
         };
-        /// <summary>
-        /// base class from message
-        /// </summary>
+
+        // ==========================================
+        // 2.2 Message Classes
+        // ==========================================
         public class BaseMassage
         {
             public string TypeMessage { get; set; }
         }
-        /// <summary>
-        /// class For send info to server Register
-        /// </summary>
+
         public class MessageRequestRegister : BaseMassage
         {
             public MessageRequestRegister() => TypeMessage = nameof(MessageRequestRegister);
             public string login { get; set; }
             public string Password { get; set; }
         }
-        /// <summary>
-        /// class for send info user Register
-        /// </summary>
+
         public class MessageResponseRegister : BaseMassage
         {
             public MessageResponseRegister() => TypeMessage = nameof(MessageResponseRegister);
@@ -50,55 +73,39 @@ namespace ZNetwork
             public string Name { get; set; }
             public string Roles { get; set; }
             public string Groups { get; set; }
-
         }
-        /// <summary>
-        /// class SystemMessage From server
-        /// </summary>
+
         public class MessageSystemInfo : BaseMassage
         {
             public MessageSystemInfo() => TypeMessage = nameof(MessageSystemInfo);
-
-            public string Code { get; set; } // code error
-            public string info { get; set; } // description info of error
-
+            public string Code { get; set; }
+            public string info { get; set; }
         }
-        /// <summary>
-        /// Send message Client 
-        /// </summary>
+
         public class MessageSendData : BaseMassage
         {
             public MessageSendData() => TypeMessage = nameof(MessageSendData);
             public string Message { get; set; }
-
             public string ID { get; set; }
-            /// <summary>
-            /// this is Group Replicated Message
-            /// </summary>
             public string Channel { get; set; }
         }
-        /// <summary>
-        /// Received message on client 
-        /// </summary>
+
         public class MessageReceivedData : BaseMassage
         {
             public MessageReceivedData() => TypeMessage = nameof(MessageReceivedData);
             public string NameSender { get; set; }
-            /// <summary>
-            /// this is Group Replicated Message
-            /// </summary>
             public string Channels { get; set; }
-            /// <summary>
-            /// Time Send message
-            /// </summary>
             public DateTime SendTime { get; set; } = DateTime.Now;
             public string RolesSender { get; set; }
             public string Message { get; set; }
-
         }
-        /// <summary>
-        /// Service for work serialization or deserialization
-        /// </summary>
+
+        public class MessageUnRegister : BaseMassage
+        {
+            public MessageUnRegister() => TypeMessage = nameof(MessageUnRegister);
+            public string ID { get; set; }
+        }
+
         public class MessageSerializer
         {
             private readonly JsonSerializerOptions _options;
@@ -107,23 +114,18 @@ namespace ZNetwork
             {
                 _options = new JsonSerializerOptions
                 {
-                    //PropertyNamingPolicy = JsonNamingPolicy.CamelCase, // name property camelCase
                     PropertyNamingPolicy = null,
-                    WriteIndented = false, // compact json for network
+                    WriteIndented = false,
                     IncludeFields = false,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull // don't send null property
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
                 };
             }
 
-            /// <summary>
-            /// Serialize any message into json
-            /// </summary>
             public string Serialize(BaseMassage message)
             {
                 if (message == null)
                     throw new ArgumentNullException(nameof(message));
 
-                // auto correct TypeMessage
                 if (string.IsNullOrEmpty(message.TypeMessage))
                 {
                     message.TypeMessage = message.GetType().Name;
@@ -132,9 +134,6 @@ namespace ZNetwork
                 return JsonSerializer.Serialize(message, message.GetType(), _options);
             }
 
-            /// <summary>
-            /// deserialization any hson into message
-            /// </summary>
             public BaseMassage? Deserialize(string json)
             {
                 if (string.IsNullOrWhiteSpace(json))
@@ -142,11 +141,9 @@ namespace ZNetwork
 
                 try
                 {
-                    // parse json so get TypeMessage (RootElement)
                     using JsonDocument doc = JsonDocument.Parse(json);
                     JsonElement root = doc.RootElement;
 
-                    // try get TypeMessage
                     if (!root.TryGetProperty("typeMessage", out JsonElement typeElement) &&
                         !root.TryGetProperty("TypeMessage", out typeElement))
                     {
@@ -155,7 +152,6 @@ namespace ZNetwork
 
                     string messageType = typeElement.GetString() ?? string.Empty;
 
-                    // deserialiaze Type class message
                     return messageType switch
                     {
                         nameof(MessageRequestRegister) => JsonSerializer.Deserialize<MessageRequestRegister>(json, _options),
@@ -163,6 +159,7 @@ namespace ZNetwork
                         nameof(MessageSystemInfo) => JsonSerializer.Deserialize<MessageSystemInfo>(json, _options),
                         nameof(MessageSendData) => JsonSerializer.Deserialize<MessageSendData>(json, _options),
                         nameof(MessageReceivedData) => JsonSerializer.Deserialize<MessageReceivedData>(json, _options),
+                        nameof(MessageUnRegister) => JsonSerializer.Deserialize<MessageUnRegister>(json, _options),
                         _ => throw new NotSupportedException($"Unknown message type: {messageType}")
                     };
                 }
@@ -172,282 +169,218 @@ namespace ZNetwork
                 }
             }
         }
-        /// <summary>
-        /// this create message for send
-        /// </summary>
-        /// <param name="msg">class message inherited from  BaseMessage</param>
-        /// <returns>data format json on string</returns>
-        public string CreateMessage(BaseMassage msg) 
+
+        // ==========================================
+        // 2.4 МЕТОДЫ ДЛЯ РАБОТЫ С СООБЩЕНИЯМИ
+        // ==========================================
+        public string CreateMessage(BaseMassage msg)
         {
             string json = serializer.Serialize(msg);
             return json;
         }
-        /// <summary>
-        /// convert json string into class
-        /// </summary>
-        /// <param name="msg">json on string</param>
-        /// <returns>return class inherited from BaseMessage </returns>
+
         public BaseMassage? DeserializeMessage(string msg)
         {
-           return serializer.Deserialize(msg);
+            return serializer.Deserialize(msg);
         }
-            public class RequestsDate
-            {
-                public string SenderID { get; set; } = "";
-                public string Text { get; set; } = "";
-                public string Group { get; set; } = "";
-                public long Timestamp { get; set; }
 
-                public RequestsDate()
+        // ==========================================
+        // 2.5 МЕТОДЫ ДЛЯ РАБОТЫ С ДАТОЙ (СТАРЫЙ ФОРМАТ)
+        // ==========================================
+        public string CreateDateForServer(string senderID, string text, string group)
+        {
+            try
+            {
+                var requestData = new RequestsDate
                 {
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                }
+                    SenderID = senderID,
+                    Text = text,
+                    Group = group,
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                };
+
+                string jsonString = JsonSerializer.Serialize(requestData, _jsonOptions);
+                return jsonString;
             }
-
-            public class ResponseDate
+            catch (Exception ex)
             {
-                public string SenderID { get; set; } = "";
-                public string Name { get; set; } = "";
-                public string Role { get; set; } = "";
-                public string Text { get; set; } = "";
-                public string Group { get; set; } = "";
-                public long Timestamp { get; set; }
-                public string Type { get; set; } = "message";
-
-                public ResponseDate()
-                {
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-                }
+                return "{}";
             }
+        }
 
-            public string CreateDateForServer(string senderID, string text, string group)
+        public string CreateDateForClients(string senderID, string name, string role, string text, string group)
+        {
+            try
             {
-                try
+                var responseData = new ResponseDate
                 {
-                    var requestData = new RequestsDate
-                    {
-                        SenderID = senderID,
-                        Text = text,
-                        Group = group,
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-                    };
+                    SenderID = senderID,
+                    Name = name,
+                    Role = role,
+                    Text = text,
+                    Group = group,
+                    Type = "message",
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                };
 
-                    //string jsonString = JsonSerializer.Serialize(requestData, new JsonSerializerOptions
-                    //{
-                    //    WriteIndented = true  
-                    //});
-                    string jsonString = JsonSerializer.Serialize(requestData, _jsonOptions);
-                    return jsonString;
-                }
-                catch (Exception ex)
-                {
-                    return "{}";
-                }
+                string jsonString = JsonSerializer.Serialize(responseData, _jsonOptions);
+                return jsonString;
             }
-
-
-            public string CreateDateForClients(string senderID, string name, string role, string text, string group)
+            catch (Exception ex)
             {
-                try
-                {
-                    var responseData = new ResponseDate
-                    {
-                        SenderID = senderID,
-                        Name = name,
-                        Role = role,
-                        Text = text,
-                        Group = group,
-                        Type = "message",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-                    };
-
-                    //string jsonString = JsonSerializer.Serialize(responseData, new JsonSerializerOptions
-                    //{
-                    //    WriteIndented = true
-                    //});
-                    string jsonString = JsonSerializer.Serialize(responseData, _jsonOptions);
-                    return jsonString;
-                }
-                catch (Exception ex)
-                {
-                    return "{}";
-                }
+                return "{}";
             }
+        }
 
-            public string CreateSystemMessage(string text, string group)
+        public string CreateSystemMessage(string text, string group)
+        {
+            try
             {
-                try
+                var systemMessage = new ResponseDate
                 {
-                    var systemMessage = new ResponseDate
-                    {
-                        SenderID = "system",
-                        Name = "Система",
-                        Role = "admin",
-                        Text = text,
-                        Group = group,
-                        Type = "system",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-                    };
+                    SenderID = "system",
+                    Name = "Система",
+                    Role = "admin",
+                    Text = text,
+                    Group = group,
+                    Type = "system",
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                };
 
-                    return JsonSerializer.Serialize(systemMessage);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ZJSON] Ошибка создания системного сообщения: {ex.Message}");
-                    return "{}";
-                }
+                return JsonSerializer.Serialize(systemMessage);
             }
-
-            public string CreateErrorMessage(string errorText, string group)
+            catch (Exception ex)
             {
-                try
-                {
-                    var errorMessage = new ResponseDate
-                    {
-                        SenderID = "error",
-                        Name = "Ошибка",
-                        Role = "system",
-                        Text = errorText,
-                        Group = group,
-                        Type = "error",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
-                    };
-
-                    return JsonSerializer.Serialize(errorMessage);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ZJSON] Ошибка создания сообщения об ошибке: {ex.Message}");
-                    return "{}";
-                }
+                Console.WriteLine($"[ZJSON] Ошибка создания системного сообщения: {ex.Message}");
+                return "{}";
             }
-            /// <summary>
-            /// Parsing Message from Clients
-            /// </summary>
-            /// <param name="jsonDate"></param>
-            /// <returns></returns>
-            public RequestsDate ReadRequestDate(string jsonDate)
+        }
+
+        public string CreateErrorMessage(string errorText, string group)
+        {
+            try
             {
-                try
+                var errorMessage = new ResponseDate
                 {
-                    if (string.IsNullOrEmpty(jsonDate))
-                    {
-                        Console.WriteLine("[ZJSON] Ошибка: пустой JSON");
-                        return new RequestsDate();
-                    }
-                    var requestData = JsonSerializer.Deserialize<RequestsDate>(jsonDate);
+                    SenderID = "error",
+                    Name = "Ошибка",
+                    Role = "system",
+                    Text = errorText,
+                    Group = group,
+                    Type = "error",
+                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds()
+                };
 
-                    if (requestData != null)
-                    {
+                return JsonSerializer.Serialize(errorMessage);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ZJSON] Ошибка создания сообщения об ошибке: {ex.Message}");
+                return "{}";
+            }
+        }
 
-                        return requestData;
-                    }
-
+        public RequestsDate ReadRequestDate(string jsonDate)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(jsonDate))
+                {
+                    Console.WriteLine("[ZJSON] Ошибка: пустой JSON");
                     return new RequestsDate();
                 }
-                catch (JsonException ex)
-                {
-                    Console.WriteLine($"[ZJSON] Ошибка парсинга JSON: {ex.Message}");
-                    Console.WriteLine($"[ZJSON] Некорректный JSON: {jsonDate}");
-                    return new RequestsDate();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ZJSON] Общая ошибка: {ex.Message}");
-                    return new RequestsDate();
-                }
+
+                var requestData = JsonSerializer.Deserialize<RequestsDate>(jsonDate);
+                return requestData ?? new RequestsDate();
             }
-
-            /// <summary>
-            /// parserd message from Server
-            /// </summary>
-            /// <param name="jsonDate"></param>
-            /// <returns></returns>
-            public ResponseDate ReadResponseDate(string jsonDate)
+            catch (JsonException ex)
             {
-                try
+                Console.WriteLine($"[ZJSON] Ошибка парсинга JSON: {ex.Message}");
+                return new RequestsDate();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ZJSON] Общая ошибка: {ex.Message}");
+                return new RequestsDate();
+            }
+        }
+
+        public ResponseDate ReadResponseDate(string jsonDate)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(jsonDate))
                 {
-                    if (string.IsNullOrEmpty(jsonDate))
-                    {
-                        Console.WriteLine("[ZJSON] Ошибка: пустой JSON");
-                        return new ResponseDate();
-                    }
-
-                    var responseData = JsonSerializer.Deserialize<ResponseDate>(jsonDate);
-
-                    if (responseData != null)
-                    {
-                        return responseData;
-                    }
-
+                    Console.WriteLine("[ZJSON] Ошибка: пустой JSON");
                     return new ResponseDate();
                 }
-                catch (JsonException ex)
-                {
-                    Console.WriteLine($"[ZJSON] Ошибка парсинга JSON: {ex.Message}");
-                    return new ResponseDate();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ZJSON] Общая ошибка: {ex.Message}");
-                    return new ResponseDate();
-                }
+
+                var responseData = JsonSerializer.Deserialize<ResponseDate>(jsonDate);
+                return responseData ?? new ResponseDate();
             }
-
-            // universal old method ser 
-            public string SerializeToJson<T>(T data)
+            catch (JsonException ex)
             {
-                try
-                {
-                    return JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = false });
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ZJSON] Ошибка сериализации: {ex.Message}");
-                    return "{}";
-                }
+                Console.WriteLine($"[ZJSON] Ошибка парсинга JSON: {ex.Message}");
+                return new ResponseDate();
             }
-
-            // universal Old method des
-            public T? DeserializeFromJson<T>(string jsonDate)
+            catch (Exception ex)
             {
-                try
-                {
-                    if (string.IsNullOrEmpty(jsonDate))
-                        return default(T);
+                Console.WriteLine($"[ZJSON] Общая ошибка: {ex.Message}");
+                return new ResponseDate();
+            }
+        }
 
-                    return JsonSerializer.Deserialize<T>(jsonDate);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[ZJSON] Ошибка десериализации: {ex.Message}");
+        // Универсальные методы сериализации
+        public string SerializeToJson<T>(T data)
+        {
+            try
+            {
+                return JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = false });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ZJSON] Ошибка сериализации: {ex.Message}");
+                return "{}";
+            }
+        }
+
+        public T? DeserializeFromJson<T>(string jsonDate)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(jsonDate))
                     return default(T);
-                }
+
+                return JsonSerializer.Deserialize<T>(jsonDate);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ZJSON] Ошибка десериализации: {ex.Message}");
+                return default(T);
             }
         }
-    
-    
-public class ZNet 
+    }
+
+    // ==========================================
+    // 3. БАЗОВЫЙ КЛАСС ZNet
+    // ==========================================
+    public class ZNet
     {
         protected TcpListener? _listener;
         protected TcpClient? _client;
         protected NetworkStream? _stream;
         protected bool _isConnected = false;
         protected bool _isRunning = false;
-        public class ZNetDate 
+
+        public class ZNetDate
         {
             public string IP { get; set; } = "";
             public int Port { get; set; }
         }
-        public virtual void SendDate(string JsonDate) 
-        {
-            
-            
-        }
-        public virtual string ReadDate() 
-        {
-            return "";
-        }
+
+        public virtual void SendDate(string JsonDate) { }
+        public virtual string ReadDate() { return ""; }
+
         protected IPAddress GetLocalIP()
         {
             var host = Dns.GetHostEntry(Dns.GetHostName());
@@ -460,6 +393,7 @@ public class ZNet
             }
             return IPAddress.Loopback;
         }
+
         public virtual void Close()
         {
             _isRunning = false;
@@ -468,32 +402,35 @@ public class ZNet
             _client?.Close();
             _listener?.Stop();
         }
-
     }
+
+    // ==========================================
+    // 4. КЛАСС СЕРВЕРА
+    // ==========================================
     public class ZnetServer : ZNet
     {
-
         ZNetDate? NetData;
-        public List<(string ID, string IP , TcpClient Client)> ListConnection = new List<(string ID, string IP , TcpClient Client)>();
+        public List<(string ID, string IP, TcpClient Client)> ListConnection = new List<(string ID, string IP, TcpClient Client)>();
         public event Action<string> PostRegister;
-        public void CreateZNetDate(string IP , int Port) 
+
+        public void CreateZNetDate(string IP, int Port)
         {
             NetData = new ZNetDate();
             NetData.IP = IP;
             NetData.Port = Port;
         }
+
         public void StartListening(int port = 8888)
         {
-
             try
             {
                 IPAddress localIP;
-                ZNetDate serverInfo;  
+                ZNetDate serverInfo;
 
                 if (NetData != null && !string.IsNullOrEmpty(NetData.IP) && NetData.Port > 0)
                 {
                     Console.WriteLine("[СЕРВЕР] Используются предустановленные данные подключения");
-                    localIP = IPAddress.Parse(NetData.IP); 
+                    localIP = IPAddress.Parse(NetData.IP);
                     serverInfo = NetData;
                 }
                 else
@@ -506,6 +443,7 @@ public class ZNet
                         Port = port
                     };
                 }
+
                 _listener = new TcpListener(localIP, serverInfo.Port);
                 _listener.Start();
                 _isRunning = true;
@@ -531,7 +469,7 @@ public class ZNet
                     Console.WriteLine($"[СЕРВЕР] Клиент подключен: {newClient.Client.RemoteEndPoint}");
                     string clientIP = ((IPEndPoint)newClient.Client.RemoteEndPoint!).Address.ToString();
 
-                    ListConnection.Add((ID: "null", IP: clientIP , newClient));
+                    ListConnection.Add((ID: "null", IP: clientIP, newClient));
 
                     Task.Run(() => HandleClient(newClient));
                 }
@@ -542,30 +480,43 @@ public class ZNet
                 }
             }
         }
-        public bool isValidClient(string clientIP, string clientID) 
+
+        public bool isValidClient(string clientIP, string clientID)
         {
             string id = FindIDByIP(clientIP);
-            if (id == clientID) 
+            return id == clientID;
+        }
+
+        public virtual bool Register(string senderID, string text, string group, string SenderIP)
+        {
+            return false;
+        }
+
+        protected async virtual void ReceivedClientMessage(string senderID, string text, string group, long timestap, NetworkStream stream, TcpClient client) { }
+
+        /// <summary>
+        /// Logs out user by setting their ID to "null" without removing from connection list
+        /// </summary>
+        /// <param name="ip">IP address of the client</param>
+        /// <param name="client">TcpClient instance</param>
+        /// <returns>True if logout was successful, false if client not found</returns>
+        public bool LogOutUser(string ip, TcpClient client)
+        {
+            var index = ListConnection.FindIndex(x => x.IP == ip);
+            if (index != -1)
             {
+                var old = ListConnection[index];
+                // Сохраняем IP и Client, меняем ID на "null"
+                ListConnection[index] = ("null", old.IP, client);
+                Console.WriteLine($"[СЕРВЕР] User logged out: {old.ID} -> null for IP {ip}");
                 return true;
             }
-            return false;
-        
+            else
+            {
+                Console.WriteLine($"[СЕРВЕР] Client with IP {ip} not found for logout");
+                return false;
+            }
         }
-        public virtual bool Register(string senderID, string text, string group, string SenderIP) 
-        {
-            return false;
-        }
-        protected async virtual void ReceivedClientMessage(string senderID, string text, string group, long timestap, NetworkStream stream , TcpClient client)
-        {
-            
-        
-        }
-        /// <summary>
-        /// listen and handle message from Clients
-        /// </summary>
-        /// <param name="client"></param>
-        /// <returns></returns>
         private async Task HandleClient(TcpClient client)
         {
             string clientIP = "";
@@ -577,7 +528,6 @@ public class ZNet
                 byte[] buffer = new byte[4096];
                 ZJSON jsonHelper = new ZJSON();
 
-                
                 while (client.Connected)
                 {
                     try
@@ -599,6 +549,11 @@ public class ZNet
 
                         switch (message)
                         {
+                            case MessageUnRegister unRegister:
+                                Console.WriteLine($"[SERVER] User {unRegister.ID} is logging out");
+                                LogOutUser(clientIP, client);
+                                break;
+
                             case MessageRequestRegister registerRequest:
                                 string login = registerRequest.login;
                                 string password = registerRequest.Password;
@@ -615,7 +570,7 @@ public class ZNet
                                         var successResponse = new MessageResponseRegister
                                         {
                                             iSSuccses = true,
-                                            ID = login, 
+                                            ID = login,
                                             Name = login,
                                             Roles = "User",
                                             Groups = "General"
@@ -673,18 +628,15 @@ public class ZNet
                     }
                 }
             }
-            
+
             RemoveClientConnection(clientIP, clientID);
             Console.WriteLine("[SERVER] Client disconnected");
         }
-        /// <summary>
-        /// Remove user from List
-        /// </summary>
+
         private void RemoveClientConnection(string clientIP, string clientID)
         {
             lock (ListConnection)
             {
-                // find and Remove ID
                 var connectionToRemove = ListConnection.FirstOrDefault(c => c.IP == clientIP);
                 if (connectionToRemove != default)
                 {
@@ -693,7 +645,7 @@ public class ZNet
                 }
 
                 if (clientID == "null")
-                { 
+                {
                     for (int i = ListConnection.Count - 1; i >= 0; i--)
                     {
                         if (ListConnection[i].IP == clientIP && ListConnection[i].ID == "null")
@@ -719,7 +671,7 @@ public class ZNet
             }
         }
 
-        public void SendDateByIp(string IP , string date) 
+        public void SendDateByIp(string IP, string date)
         {
             ZJSON js = new ZJSON();
             byte[] data = Encoding.UTF8.GetBytes(date);
@@ -730,10 +682,10 @@ public class ZNet
                 {
                     if (Client.Client.Connected)
                     {
-                        if (locIP == IP) 
+                        if (locIP == IP)
                         {
-                            NetworkStream stream =  Client.GetStream();
-                            stream.Write(data ,0, data.Length);
+                            NetworkStream stream = Client.GetStream();
+                            stream.Write(data, 0, data.Length);
                             return;
                         }
                     }
@@ -744,16 +696,15 @@ public class ZNet
                 }
             }
         }
-        public override void SendDate(string JsonData)
-        {
-            
-        }
+
+        public override void SendDate(string JsonData) { }
 
         public override void Close()
         {
             base.Close();
             Console.WriteLine("[СЕРВЕР] Остановлен");
         }
+
         public void RemoveByIP(string ip)
         {
             int removed = ListConnection.RemoveAll(x => x.IP == ip);
@@ -763,14 +714,13 @@ public class ZNet
                 Console.WriteLine($"[СЕРВЕР] Клиент с IP {ip} не найден");
         }
 
-        // Изменение ID по IP
-        public void UpdateIDByIP(string ip, string newID , TcpClient Client)
+        public void UpdateIDByIP(string ip, string newID, TcpClient Client)
         {
             var index = ListConnection.FindIndex(x => x.IP == ip);
             if (index != -1)
             {
                 var old = ListConnection[index];
-                ListConnection[index] = (newID, old.IP , Client);
+                ListConnection[index] = (newID, old.IP, Client);
                 Console.WriteLine($"[СЕРВЕР] ID изменен: {old.ID} -> {newID} для IP {ip}");
             }
             else
@@ -779,10 +729,6 @@ public class ZNet
             }
         }
 
-        /// <summary>
-        /// delete object by id 
-        /// </summary>
-        /// <param name="id"></param>
         public void RemoveByID(string id)
         {
             int removed = ListConnection.RemoveAll(x => x.ID == id);
@@ -792,19 +738,13 @@ public class ZNet
                 Console.WriteLine($"[СЕРВЕР] Клиент с ID {id} не найден");
         }
 
-        /// <summary>
-        /// Edit IP by id
-        /// </summary>
-        /// <param name="id"></param>
-        /// <param name="newIP"></param>
-        /// <param name="Client"></param>
-        public void UpdateIPByID(string id, string newIP , TcpClient Client)
+        public void UpdateIPByID(string id, string newIP, TcpClient Client)
         {
             var index = ListConnection.FindIndex(x => x.ID == id);
             if (index != -1)
             {
                 var old = ListConnection[index];
-                ListConnection[index] = (old.ID, newIP , Client);
+                ListConnection[index] = (old.ID, newIP, Client);
                 Console.WriteLine($"[СЕРВЕР] IP изменен: {old.IP} -> {newIP} для ID {id}");
             }
             else
@@ -813,33 +753,32 @@ public class ZNet
             }
         }
 
-        // Поиск ID по IP
         public string FindIDByIP(string ip)
         {
             var client = ListConnection.Find(x => x.IP == ip);
             return client.ID;
         }
 
-        // Поиск IP по ID
         public string FindIPByID(string id)
         {
             var client = ListConnection.Find(x => x.ID == id);
             return client.IP;
         }
 
-        // Проверка существует ли IP
         public bool HasIP(string ip)
         {
             return ListConnection.Exists(x => x.IP == ip);
         }
 
-        // Проверка существует ли ID
         public bool HasID(string id)
         {
             return ListConnection.Exists(x => x.ID == id);
         }
     }
 
+    // ==========================================
+    // 5. КЛАСС КЛИЕНТА
+    // ==========================================
     public class ZNetClient : ZNet
     {
         public virtual bool Connect(string serverIP, int port = 8888)
@@ -889,10 +828,9 @@ public class ZNet
                 return false;
             }
         }
-        protected virtual void OnDateReceived(string data) 
-        {
 
-        }
+        protected virtual void OnDateReceived(string data) { }
+
         private async Task ReadDataLoop()
         {
             byte[] buffer = new byte[4096];
@@ -918,10 +856,8 @@ public class ZNet
                 }
             }
         }
-        public override void SendDate(string JsonDate)
-        {
-            
-        }
+
+        public override void SendDate(string JsonDate) { }
 
         public void SendCustomData(string data)
         {
@@ -979,5 +915,3 @@ public class ZNet
         }
     }
 }
-
-    

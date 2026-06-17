@@ -73,7 +73,7 @@ namespace ZovodchaninClient
                 Console.Write("Введите сообщение для сервера: ");
                 string? message = Console.ReadLine();
 
-                if (!string.IsNullOrEmpty(message))
+                if (message != "" || message != null)
                 {
                     byte[] data = Encoding.UTF8.GetBytes(message);
                     _stream.Write(data, 0, data.Length);
