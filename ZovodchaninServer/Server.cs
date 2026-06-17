@@ -126,6 +126,9 @@ namespace ZovodchaninServer
                         // Handle different message types
                         switch (message)
                         {
+                            case MessageUnRegister Unreg:
+                                Console.WriteLine("UnRegister");
+                                break;
                             case MessageResponseRegister registerResponse:
                                 if (registerResponse.ID == ID)
                                 {

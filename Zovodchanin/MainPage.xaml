@@ -65,27 +65,60 @@
         </Grid.ColumnDefinitions>
 
         <!-- LEFT PANEL: Chat List -->
+        <!-- LEFT PANEL: Chat List -->
         <Border Grid.Column="0" Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
-            <!-- Initially empty, populated via ChatListAddChat -->
-            <ListBox x:Name="ChatListBox" 
-                     BorderThickness="0" 
-                     Background="Transparent" 
-                     ScrollViewer.VerticalScrollBarVisibility="Auto">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <!-- Button containing only the chat name -->
-                        <Button Content="{Binding}" 
-                                Background="Transparent" 
-                                BorderThickness="0" 
-                                HorizontalContentAlignment="Left"
-                                FontSize="14"
-                                FontWeight="SemiBold"
-                                Foreground="{DynamicResource TextBrush}"
-                                Cursor="Hand"
-                                Click="ChatButton_Click"/>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <!-- Chat list -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Logout button -->
+                </Grid.RowDefinitions>
+
+                <!-- Chat List -->
+                <ListBox Grid.Row="0" 
+                 x:Name="ChatListBox" 
+                 BorderThickness="0" 
+                 Background="Transparent" 
+                 ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Button Content="{Binding}" 
+                            Background="Transparent" 
+                            BorderThickness="0" 
+                            HorizontalContentAlignment="Left"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="{DynamicResource TextBrush}"
+                            Cursor="Hand"
+                            Click="ChatButton_Click"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Logout Button at bottom -->
+                <Button Grid.Row="1" 
+                x:Name="LogoutButton"
+                Content="🚪 Выйти" 
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Bottom"
+                Height="50"
+                Margin="10,0,10,10"
+                Background="{DynamicResource SidebarBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                FontSize="14"
+                FontWeight="SemiBold"
+                Foreground="{DynamicResource TextBrush}"
+                Cursor="Hand"
+                Click="LogoutButton_Click">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="8"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+            </Grid>
         </Border>
 
         <!-- RIGHT PANEL: Main Chat Area -->

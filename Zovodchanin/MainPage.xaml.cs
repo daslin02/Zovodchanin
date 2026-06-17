@@ -204,6 +204,11 @@ namespace Zovodchanin
             MessageInput.Clear();
             MessageInput.Focus();
         }
+        private void LogoutButton_Click(object sender, RoutedEventArgs e)
+        {
+            MainWindow MW =  Application.Current.MainWindow as MainWindow;
+            MW.UnRegister();
+        }
     }
 
     // Helper class for message data binding with time support
@@ -214,4 +219,5 @@ namespace Zovodchanin
         public string Time { get; set; }          // Formatted time (HH:mm)
         public DateTime FullTimestamp { get; set; } // Full timestamp for sorting/filtering
     }
+
 }

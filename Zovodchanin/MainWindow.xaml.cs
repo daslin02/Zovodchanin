@@ -60,6 +60,20 @@ namespace Zovodchanin
         {
             return userInfo.ID;
         }
+        public void UnRegister() 
+        {
+            ZJSON.MessageUnRegister msg = new ZJSON.MessageUnRegister
+            {
+                ID = userInfo.ID
+            };
+            string ser = _msgSer.Serialize(msg);
+            client.SendCustomData(ser);
+            userInfo = null;
+            RegPage = new RegistrationPage();
+            MP = null;
+            MainFrame.Navigate(RegPage);
+            
+        }
         private void ReadData(string data) 
         {
             Application.Current.Dispatcher.Invoke(new Action(() => {
