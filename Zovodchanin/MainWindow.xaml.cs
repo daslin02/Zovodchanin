@@ -118,7 +118,10 @@ namespace Zovodchanin
                             {
                                 MP.ChatListAddChat(chatName);
                             }
-                            
+                            if (MP.ChatListBox.Items.Count > 0)
+                            {
+                                MP.ChatListBox.SelectedIndex = 0; 
+                            }
                             break;
                         }
                         else 
